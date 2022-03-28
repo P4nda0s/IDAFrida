@@ -194,7 +194,7 @@ class GenerateFridaHookScript(IDAFridaMenuAction):
         gen = ScriptGenerator(global_config)
         idb_path = os.path.dirname(idaapi.get_input_file_path())
         out_file = os.path.join(idb_path, "IDAhook.js")
-        selected = [idaapi.getn_func(idx - 1).start_ea for idx in ctx.chooser_selection]
+        selected = [idaapi.getn_func(idx).start_ea for idx in ctx.chooser_selection] #from "idaapi.getn_func(idx - 1)" to "idaapi.getn_func(idx)"
         gen.generate_for_funcs_to_file(selected, out_file)
         print("generate success out: " + out_file)
 
