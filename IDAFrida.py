@@ -58,19 +58,40 @@ from PyQt5.QtWidgets import QDialog, QHBoxLayout, QVBoxLayout, QTextEdit
 # [filename] => input file name of IDA. e.g. xxx.so / xxx.exe 
 
 default_template = """
+
+
+function print_arg(addr){
+    var module = Process.findRangeByAddress(addr);
+    if(module != null) return hexdump(addr) + "\\n";
+    return ptr(addr) + "\\n";
+}
+
+function hook_native_addr(funcPtr, paramsNum){
+    var module = Process.findModuleByAddress(funcPtr);
     try {
-        Interceptor.attach(Module.findBaseAddress("[filename]").add([offset]), {
-        onEnter: function (args) {
-            console.log("enter: [funcname]");
-        },
-        onLeave: function (arg) {
-            console.log("leave: [funcname]");
+    Interceptor.attach(funcPtr, {
+        onEnter: function(args){
+            this.logs = [];
+            this.params = [];
+            this.logs.push("Soname : " + module.name + "  Method hex:  " + ptr(funcPtr).sub(module.base) + "\\n");
+            for(let i = 0; i < paramsNum; i++){
+                this.params.push(args[i]);
+                this.logs.push("this.args" + i + " onEnter: " + print_arg(args[i]));
+            }
+        }, onLeave: function(retval){
+            for(let i = 0; i < paramsNum; i++){
+                this.logs.push("this.args" + i + " onLeave: " + print_arg(this.params[i]));
+            }
+            this.logs.push("retval onLeave: " + print_arg(retval) + "\\n");
+            console.log(this.logs);
         }
-        });
+    });}catch (e) {
+        console.log(e);
     }
-    catch(err) {
-        console.log(err);
-    }
+
+hook_native_addr(Module.findBaseAddress("[filename]").add([offset],3);
+}
+
     """
 
 
