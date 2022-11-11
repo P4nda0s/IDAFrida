@@ -10,17 +10,48 @@ A simple IDA plugin  to generate FRIDA script.
 ## default template
 IDAFrida applies template to all selected functions and then generate a single frida script.
 ```js
-try {
-        Interceptor.attach(Module.findBaseAddress("[filename]").add([offset]), {
-        onEnter: function (args) {
-            console.log("enter: [funcname]");
-        },
-        onLeave: function (arg) {
-            console.log("leave: [funcname]");
+
+(function () {
+
+    // @ts-ignore
+    function print_arg(addr) {
+        try {
+            var module = Process.findRangeByAddress(addr);
+            if (module != null) return "\\n"+hexdump(addr) + "\\n";
+            return ptr(addr) + "\\n";
+        } catch (e) {
+            return addr
         }
-        });
     }
-    catch(err) {
-        console.log(err);
+
+    // @ts-ignore
+    function hook_native_addr(funcPtr, paramsNum) {
+        var module = Process.findModuleByAddress(funcPtr);
+        try {
+            Interceptor.attach(funcPtr, {
+                onEnter: function (args) {
+                    this.logs = "";
+                    this.params = [];
+                    // @ts-ignore
+                    this.logs=this.logs.concat("So: " + module.name + "  Method base: " + ptr(funcPtr).sub(module.base) + "\\n");
+                    for (let i = 0; i < paramsNum; i++) {
+                        this.params.push(args[i]);
+                        this.logs=this.logs.concat("this.args" + i + " onEnter: " + print_arg(args[i]));
+                    }
+                }, onLeave: function (retval) {
+                    for (let i = 0; i < paramsNum; i++) {
+                        this.logs=this.logs.concat("this.args" + i + " onLeave: " + print_arg(this.params[i]));
+                    }
+                    this.logs=this.logs.concat("retval onLeave: " + print_arg(retval) + "\\n");
+                    console.log(this.logs);
+                }
+            });
+        } catch (e) {
+            console.log(e);
+        }
     }
+    // @ts-ignore
+    hook_native_addr(Module.findBaseAddress("[filename]").add([offset]), [nargs]);
+})();
+
 ```

@@ -58,19 +58,50 @@ from PyQt5.QtWidgets import QDialog, QHBoxLayout, QVBoxLayout, QTextEdit
 # [filename] => input file name of IDA. e.g. xxx.so / xxx.exe 
 
 default_template = """
-    try {
-        Interceptor.attach(Module.findBaseAddress("[filename]").add([offset]), {
-        onEnter: function (args) {
-            console.log("enter: [funcname]");
-        },
-        onLeave: function (arg) {
-            console.log("leave: [funcname]");
+
+(function () {
+
+    // @ts-ignore
+    function print_arg(addr) {
+        try {
+            var module = Process.findRangeByAddress(addr);
+            if (module != null) return "\\n"+hexdump(addr) + "\\n";
+            return ptr(addr) + "\\n";
+        } catch (e) {
+            return addr
         }
-        });
     }
-    catch(err) {
-        console.log(err);
+
+    // @ts-ignore
+    function hook_native_addr(funcPtr, paramsNum) {
+        var module = Process.findModuleByAddress(funcPtr);
+        try {
+            Interceptor.attach(funcPtr, {
+                onEnter: function (args) {
+                    this.logs = "";
+                    this.params = [];
+                    // @ts-ignore
+                    this.logs=this.logs.concat("So: " + module.name + "  Method base: " + ptr(funcPtr).sub(module.base) + "\\n");
+                    for (let i = 0; i < paramsNum; i++) {
+                        this.params.push(args[i]);
+                        this.logs=this.logs.concat("this.args" + i + " onEnter: " + print_arg(args[i]));
+                    }
+                }, onLeave: function (retval) {
+                    for (let i = 0; i < paramsNum; i++) {
+                        this.logs=this.logs.concat("this.args" + i + " onLeave: " + print_arg(this.params[i]));
+                    }
+                    this.logs=this.logs.concat("retval onLeave: " + print_arg(retval) + "\\n");
+                    console.log(this.logs);
+                }
+            });
+        } catch (e) {
+            console.log(e);
+        }
     }
+    // @ts-ignore
+    hook_native_addr(Module.findBaseAddress("[filename]").add([offset]), [nargs]);
+})();
+
     """
 
 
@@ -131,6 +162,7 @@ class ConfigurationUI(QDialog):
 class ScriptGenerator:
     def __init__(self, configuration : Configuration) -> None:
         self.conf = configuration
+        self.imagebase=idaapi.get_imagebase()
 
     @staticmethod
     def get_idb_filename():
@@ -152,7 +184,8 @@ class ScriptGenerator:
             repdata = {
                 "filename" : self.get_idb_filename(),
                 "funcname" : ida_funcs.get_func_name(func_addr),
-                "offset" : hex(func_addr) 
+                "offset" : hex(func_addr-self.imagebase),
+                "nargs": hex(idaapi.decompile(func_addr).type.get_nargs()) 
             }
             stubs.append(self.generate_stub(repdata))
         return "\n".join(stubs)
@@ -161,6 +194,13 @@ class ScriptGenerator:
         data = self.generate_for_funcs(func_addr_list)
         try:
             open(filename, "w").write(data)
+            print("The generated Frida script has been exported to the file: ",filename)
+        except Exception as e:
+            print(e)
+            return False
+        try:
+            QApplication.clipboard().setText(data)
+            print("The generated Frida script has been copied to the clipboard!")
         except Exception as e:
             print(e)
             return False
@@ -196,7 +236,6 @@ class GenerateFridaHookScript(IDAFridaMenuAction):
         out_file = os.path.join(idb_path, "IDAhook.js")
         selected = [idaapi.getn_func(idx).start_ea for idx in ctx.chooser_selection] #from "idaapi.getn_func(idx - 1)" to "idaapi.getn_func(idx)"
         gen.generate_for_funcs_to_file(selected, out_file)
-        print("generate success out: " + out_file)
 
 
 class RunGeneratedScript(IDAFridaMenuAction):
