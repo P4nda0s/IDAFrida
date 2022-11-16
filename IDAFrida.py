@@ -46,6 +46,7 @@ class Action(idaapi.action_handler_t):
 
 ############################################################################
 import ida_funcs
+import idc
 import json
 import os
 
@@ -68,7 +69,7 @@ default_template = """
             if (module != null) return "\\n"+hexdump(addr) + "\\n";
             return ptr(addr) + "\\n";
         } catch (e) {
-            return addr
+            return addr + "\\n";
         }
     }
 
@@ -81,7 +82,7 @@ default_template = """
                     this.logs = "";
                     this.params = [];
                     // @ts-ignore
-                    this.logs=this.logs.concat("So: " + module.name + "  Method base: " + ptr(funcPtr).sub(module.base) + "\\n");
+                    this.logs=this.logs.concat("So: " + module.name + "  Method: [funcname] offset: " + ptr(funcPtr).sub(module.base) + "\\n");
                     for (let i = 0; i < paramsNum; i++) {
                         this.params.push(args[i]);
                         this.logs=this.logs.concat("this.args" + i + " onEnter: " + print_arg(args[i]));
@@ -171,6 +172,30 @@ class ScriptGenerator:
     @staticmethod
     def get_idb_path():
         return os.path.dirname(idaapi.get_input_file_path())
+ 
+    def get_function_name(self,ea):#https://hex-rays.com/products/ida/support/ida74_idapython_no_bc695_porting_guide.shtml
+        """
+        Get the real function name
+        """
+        # Try to demangle
+        function_name = idc.demangle_name(idc.get_func_name(ea), idc.get_inf_attr(idc.INF_SHORT_DN))
+
+        #if function_name:
+        #    function_name = function_name.split("(")[0]
+
+        # Function name is not mangled
+        if not function_name:
+            function_name = idc.get_func_name(ea)
+
+        if not function_name:
+            function_name = idc.get_name(ea,ida_name.GN_VISIBLE)
+
+        # If we still have no function name, make one up. Format is - 'UNKN_FNC_4120000'
+        if not function_name:
+            function_name = "UNKN_FNC_%s" % hex(ea)
+
+        return function_name
+
 
     def generate_stub(self, repdata: dict):
         s = self.conf.template
@@ -181,11 +206,12 @@ class ScriptGenerator:
     def generate_for_funcs(self, func_addr_list) -> str:
         stubs = []
         for func_addr in func_addr_list:
+            dec_func=idaapi.decompile(func_addr)
             repdata = {
                 "filename" : self.get_idb_filename(),
-                "funcname" : ida_funcs.get_func_name(func_addr),
+                "funcname" : self.get_function_name(func_addr),
                 "offset" : hex(func_addr-self.imagebase),
-                "nargs": hex(idaapi.decompile(func_addr).type.get_nargs()) 
+                "nargs": hex(dec_func.type.get_nargs()) 
             }
             stubs.append(self.generate_stub(repdata))
         return "\n".join(stubs)
