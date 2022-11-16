@@ -20,7 +20,7 @@ IDAFrida applies template to all selected functions and then generate a single f
             if (module != null) return "\\n"+hexdump(addr) + "\\n";
             return ptr(addr) + "\\n";
         } catch (e) {
-            return addr
+            return addr + "\\n";
         }
     }
 
@@ -33,7 +33,7 @@ IDAFrida applies template to all selected functions and then generate a single f
                     this.logs = "";
                     this.params = [];
                     // @ts-ignore
-                    this.logs=this.logs.concat("So: " + module.name + "  Method base: " + ptr(funcPtr).sub(module.base) + "\\n");
+                    this.logs=this.logs.concat("So: " + module.name + "  Method: [funcname] offset: " + ptr(funcPtr).sub(module.base) + "\\n");
                     for (let i = 0; i < paramsNum; i++) {
                         this.params.push(args[i]);
                         this.logs=this.logs.concat("this.args" + i + " onEnter: " + print_arg(args[i]));
