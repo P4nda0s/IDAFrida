@@ -103,7 +103,7 @@ default_template = """
     hook_native_addr(Module.findBaseAddress("[filename]").add([offset]), [nargs]);
 })();
 
-    """
+"""
 
 
 
