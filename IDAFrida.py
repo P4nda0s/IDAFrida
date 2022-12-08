@@ -1,4 +1,6 @@
+import ida_name
 import idaapi
+
 
 ###################
 # from: https://github.com/igogo-x86/HexRaysPyTools
@@ -9,8 +11,8 @@ class ActionManager(object):
     def register(self, action):
         self.__actions.append(action)
         idaapi.register_action(
-                idaapi.action_desc_t(action.name, action.description, action, action.hotkey)
-            )
+            idaapi.action_desc_t(action.name, action.description, action, action.hotkey)
+        )
 
     def initialize(self):
         pass
@@ -18,6 +20,7 @@ class ActionManager(object):
     def finalize(self):
         for action in self.__actions:
             idaapi.unregister_action(action.name)
+
 
 action_manager = ActionManager()
 
@@ -44,6 +47,7 @@ class Action(idaapi.action_handler_t):
         # type: (idaapi.action_activation_ctx_t) -> None
         raise NotImplementedError
 
+
 ############################################################################
 import ida_funcs
 import idc
@@ -56,7 +60,7 @@ from PyQt5.QtWidgets import QDialog, QHBoxLayout, QVBoxLayout, QTextEdit
 
 # [offset] => offset of target function in hex value format.
 # [funcname] => function name
-# [filename] => input file name of IDA. e.g. xxx.so / xxx.exe 
+# [filename] => input file name of IDA. e.g. xxx.so / xxx.exe
 
 default_template = """
 
@@ -106,7 +110,6 @@ default_template = """
 """
 
 
-
 class Configuration:
     def __init__(self) -> None:
         self.frida_cmd = """frida -U --attach-name="com.example.app" -l gen.js --no-pause"""
@@ -124,10 +127,10 @@ class Configuration:
 
     def reset(self):
         self.__init__()
-    
+
     def store(self):
         try:
-            data = {"frida_cmd" : self.frida_cmd, "template": self.template}
+            data = {"frida_cmd": self.frida_cmd, "template": self.template}
             open("IDAFrida.json", "w").write(json.dumps(data))
         except Exception as e:
             print(e)
@@ -143,8 +146,9 @@ class Configuration:
 
 global_config = Configuration()
 
+
 class ConfigurationUI(QDialog):
-    def __init__(self, conf : Configuration) -> None:
+    def __init__(self, conf: Configuration) -> None:
         super(ConfigurationUI, self).__init__()
         self.conf = conf
         self.edit_template = QTextEdit()
@@ -159,28 +163,28 @@ class ConfigurationUI(QDialog):
         return super().closeEvent(a0)
 
 
-
 class ScriptGenerator:
-    def __init__(self, configuration : Configuration) -> None:
+    def __init__(self, configuration: Configuration) -> None:
         self.conf = configuration
-        self.imagebase=idaapi.get_imagebase()
+        self.imagebase = idaapi.get_imagebase()
 
     @staticmethod
     def get_idb_filename():
         return os.path.basename(idaapi.get_input_file_path())
-    
+
     @staticmethod
     def get_idb_path():
         return os.path.dirname(idaapi.get_input_file_path())
- 
-    def get_function_name(self,ea):#https://hex-rays.com/products/ida/support/ida74_idapython_no_bc695_porting_guide.shtml
+
+    def get_function_name(self,
+                          ea):  # https://hex-rays.com/products/ida/support/ida74_idapython_no_bc695_porting_guide.shtml
         """
         Get the real function name
         """
         # Try to demangle
         function_name = idc.demangle_name(idc.get_func_name(ea), idc.get_inf_attr(idc.INF_SHORT_DN))
 
-        #if function_name:
+        # if function_name:
         #    function_name = function_name.split("(")[0]
 
         # Function name is not mangled
@@ -188,14 +192,13 @@ class ScriptGenerator:
             function_name = idc.get_func_name(ea)
 
         if not function_name:
-            function_name = idc.get_name(ea,ida_name.GN_VISIBLE)
+            function_name = idc.get_name(ea, ida_name.GN_VISIBLE)
 
         # If we still have no function name, make one up. Format is - 'UNKN_FNC_4120000'
         if not function_name:
             function_name = "UNKN_FNC_%s" % hex(ea)
 
         return function_name
-
 
     def generate_stub(self, repdata: dict):
         s = self.conf.template
@@ -206,12 +209,12 @@ class ScriptGenerator:
     def generate_for_funcs(self, func_addr_list) -> str:
         stubs = []
         for func_addr in func_addr_list:
-            dec_func=idaapi.decompile(func_addr)
+            dec_func = idaapi.decompile(func_addr)
             repdata = {
-                "filename" : self.get_idb_filename(),
-                "funcname" : self.get_function_name(func_addr),
-                "offset" : hex(func_addr-self.imagebase),
-                "nargs": hex(dec_func.type.get_nargs()) 
+                "filename": self.get_idb_filename(),
+                "funcname": self.get_function_name(func_addr),
+                "offset": hex(func_addr - self.imagebase),
+                "nargs": hex(dec_func.type.get_nargs())
             }
             stubs.append(self.generate_stub(repdata))
         return "\n".join(stubs)
@@ -220,7 +223,7 @@ class ScriptGenerator:
         data = self.generate_for_funcs(func_addr_list)
         try:
             open(filename, "w").write(data)
-            print("The generated Frida script has been exported to the file: ",filename)
+            print("The generated Frida script has been exported to the file: ", filename)
         except Exception as e:
             print(e)
             return False
@@ -237,8 +240,10 @@ class Frida:
     def __init__(self, conf: Configuration) -> None:
         self.conf = conf
 
+
 class IDAFridaMenuAction(Action):
     TopDescription = "IDAFrida"
+
     def __init__(self):
         super(IDAFridaMenuAction, self).__init__()
 
@@ -246,13 +251,15 @@ class IDAFridaMenuAction(Action):
         raise NotImplemented
 
     def update(self, ctx) -> None:
-        if ctx.form_type == idaapi.BWN_FUNCS:
+        if ctx.form_type == idaapi.BWN_FUNCS or ctx.form_type==idaapi.BWN_PSEUDOCODE or ctx.form_type==idaapi.BWN_DISASM:
             idaapi.attach_action_to_popup(ctx.widget, None, self.name, self.TopDescription + "/")
             return idaapi.AST_ENABLE_FOR_WIDGET
         return idaapi.AST_DISABLE_FOR_WIDGET
-    
+
+
 class GenerateFridaHookScript(IDAFridaMenuAction):
     description = "Generate Frida Script"
+
     def __init__(self):
         super(GenerateFridaHookScript, self).__init__()
 
@@ -260,20 +267,25 @@ class GenerateFridaHookScript(IDAFridaMenuAction):
         gen = ScriptGenerator(global_config)
         idb_path = os.path.dirname(idaapi.get_input_file_path())
         out_file = os.path.join(idb_path, "IDAhook.js")
-        selected = [idaapi.getn_func(idx).start_ea for idx in ctx.chooser_selection] #from "idaapi.getn_func(idx - 1)" to "idaapi.getn_func(idx)"
+        if ctx.form_type==idaapi.BWN_FUNCS:
+            selected = [idaapi.getn_func(idx).start_ea for idx in ctx.chooser_selection] #from "idaapi.getn_func(idx - 1)" to "idaapi.getn_func(idx)"
+        else:
+            selected=[idaapi.get_func(idaapi.get_screen_ea()).start_ea]
         gen.generate_for_funcs_to_file(selected, out_file)
-
 
 class RunGeneratedScript(IDAFridaMenuAction):
     description = "Run Generated Script"
+
     def __init__(self):
         super(RunGeneratedScript, self).__init__()
 
     def activate(self, ctx):
         print("template")
 
+
 class ViewFridaTemplate(IDAFridaMenuAction):
     description = "View Frida Template"
+
     def __init__(self):
         super(ViewFridaTemplate, self).__init__()
 
@@ -281,6 +293,7 @@ class ViewFridaTemplate(IDAFridaMenuAction):
         ui = ConfigurationUI(global_config)
         ui.show()
         ui.exec_()
+
 
 class SetFridaRunCommand(IDAFridaMenuAction):
     description = "Set Frida Command"
@@ -290,7 +303,7 @@ class SetFridaRunCommand(IDAFridaMenuAction):
 
     def activate(self, ctx):
         print("template")
-    
+
 
 action_manager.register(GenerateFridaHookScript())
 # action_manager.register(RunGeneratedScript())
