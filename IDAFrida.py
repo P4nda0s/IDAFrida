@@ -64,7 +64,58 @@ from PyQt5.QtWidgets import QDialog, QHBoxLayout, QVBoxLayout, QTextEdit
 
 default_template = """
 
+//[filename]->[funcname]
 (function () {
+
+    // @ts-ignore
+    function waitForLoadLibraryNative(libName,callback){
+        // @ts-ignore
+        Interceptor.attach(Module.findExportByName(null, "dlopen"), {
+            onEnter: function(args) {
+                var pathptr = args[0];
+                if (pathptr !== undefined && pathptr != null) {
+                    // @ts-ignore
+                    var path = ptr(pathptr).readCString();
+                    // @ts-ignore
+                    if (path.indexOf(libName) >= 0) {
+                        this.findedLib = true;
+                    }
+                }
+            },
+            onLeave: function(retval) {
+                if (this.findedLib) {
+                    if(callback){
+                        callback();
+                        callback=null;
+                    }
+                }
+            }
+        })
+    
+        // @ts-ignore
+        Interceptor.attach(Module.findExportByName(null, "android_dlopen_ext"), {
+            onEnter: function(args) {
+                var pathptr = args[0];
+                if (pathptr !== undefined && pathptr != null) {
+                    // @ts-ignore
+                    var path = ptr(pathptr).readCString();
+                    // @ts-ignore
+                    if (path.indexOf(libName) >= 0) {
+                        this.findedLib = true;
+                    }
+                }
+            },
+            onLeave: function(retval) {
+                if (this.findedLib) {
+                    if(callback){
+                        callback();
+                        callback=null;
+                    }
+                }
+            }
+        });
+    }
+    
 
     // @ts-ignore
     function print_arg(addr) {
@@ -103,8 +154,16 @@ default_template = """
             console.log(e);
         }
     }
-    // @ts-ignore
-    hook_native_addr(Module.findBaseAddress("[filename]").add([offset]), [nargs]);
+    let module=Module.findBaseAddress("[filename]");
+    if(module==null){
+        waitForLoadLibraryNative("[filename]",function(){
+            // @ts-ignore
+            hook_native_addr(Module.findBaseAddress("[filename]").add([offset]), [nargs]);
+        });
+    }else{
+        // @ts-ignore
+        hook_native_addr(Module.findBaseAddress("[filename]").add([offset]), [nargs]);    
+    }
 })();
 
 """
