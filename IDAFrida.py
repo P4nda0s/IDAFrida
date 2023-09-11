@@ -1,3 +1,4 @@
+import ida_kernwin
 import ida_name
 import idaapi
 
@@ -56,13 +57,13 @@ import os
 
 from PyQt5 import QtCore
 from PyQt5.Qt import QApplication
-from PyQt5.QtWidgets import QDialog, QHBoxLayout, QVBoxLayout, QTextEdit
+from PyQt5.QtWidgets import QDialog, QHBoxLayout, QVBoxLayout, QTextEdit, QLineEdit, QDialogButtonBox, QPushButton
 
 # [offset] => offset of target function in hex value format.
 # [funcname] => function name
 # [filename] => input file name of IDA. e.g. xxx.so / xxx.exe
 
-default_template = """
+default_func_hook_template = """
 
 //[filename]->[funcname]
 (function () {
@@ -168,11 +169,116 @@ default_template = """
 
 """
 
+default_address_hook_template = """
+
+//[filename]->[address]
+(function () {
+
+    // @ts-ignore
+    function waitForLoadLibraryNative(libName,callback){
+        // @ts-ignore
+        Interceptor.attach(Module.findExportByName(null, "dlopen"), {
+            onEnter: function(args) {
+                var pathptr = args[0];
+                if (pathptr !== undefined && pathptr != null) {
+                    // @ts-ignore
+                    var path = ptr(pathptr).readCString();
+                    // @ts-ignore
+                    if (path.indexOf(libName) >= 0) {
+                        this.findedLib = true;
+                    }
+                }
+            },
+            onLeave: function(retval) {
+                if (this.findedLib) {
+                    if(callback){
+                        callback();
+                        callback=null;
+                    }
+                }
+            }
+        })
+
+        // @ts-ignore
+        Interceptor.attach(Module.findExportByName(null, "android_dlopen_ext"), {
+            onEnter: function(args) {
+                var pathptr = args[0];
+                if (pathptr !== undefined && pathptr != null) {
+                    // @ts-ignore
+                    var path = ptr(pathptr).readCString();
+                    // @ts-ignore
+                    if (path.indexOf(libName) >= 0) {
+                        this.findedLib = true;
+                    }
+                }
+            },
+            onLeave: function(retval) {
+                if (this.findedLib) {
+                    if(callback){
+                        callback();
+                        callback=null;
+                    }
+                }
+            }
+        });
+    }
+
+
+    // @ts-ignore
+    function print_arg(addr) {
+        try {
+            var module = Process.findRangeByAddress(addr);
+            if (module != null) return "\\n"+hexdump(addr) + "\\n";
+            return ptr(addr) + "\\n";
+        } catch (e) {
+            return addr + "\\n";
+        }
+    }
+
+    // @ts-ignore
+    function hook_native_addr(address, registers) {
+        var module = Process.findModuleByAddress(address);
+        try {
+            Interceptor.attach(address, {
+                onEnter: function (args) {
+                    this.logs = "";
+                    // @ts-ignore
+                    this.logs=this.logs.concat("So: " + module.name + "  Address: " + ptr(address).sub(module.base) + "\\n");
+
+                    if(registers!=null&&registers.trim()!==""){
+                        for (let register of registers.trim().split(" ")) {
+                            if(register==null||register.trim()=="")continue;
+                            // @ts-ignore
+                            this.logs=this.logs.concat("this.context." + register + " onEnter: " + print_arg(this.context[register.trim()]));
+                        }
+                    }
+                    console.log(this.logs);
+                }
+            });
+        } catch (e) {
+            console.log(e);
+        }
+    }
+    let module=Module.findBaseAddress("[filename]");
+    if(module==null){
+        waitForLoadLibraryNative("[filename]",function(){
+            // @ts-ignore
+            hook_native_addr(Module.findBaseAddress("[filename]").add([address]), "[registers]");
+        });
+    }else{
+        // @ts-ignore
+        hook_native_addr(Module.findBaseAddress("[filename]").add([address]), "[registers]");
+    }
+})();
+
+"""
+
 
 class Configuration:
     def __init__(self) -> None:
         self.frida_cmd = """frida -U --attach-name="com.example.app" -l gen.js --no-pause"""
-        self.template = default_template
+        self.template_func = default_func_hook_template
+        self.template_address = default_address_hook_template
         if os.path.exists("IDAFrida.json"):
             self.load()
 
@@ -180,8 +286,12 @@ class Configuration:
         self.frida_cmd = s
         self.store()
 
-    def set_template(self, s):
-        self.template = s
+    def set_template_func(self, s):
+        self.template_func = s
+        self.store()
+
+    def set_template_address(self, s):
+        self.template_address = s
         self.store()
 
     def reset(self):
@@ -189,7 +299,8 @@ class Configuration:
 
     def store(self):
         try:
-            data = {"frida_cmd": self.frida_cmd, "template": self.template}
+            data = {"frida_cmd": self.frida_cmd, "template_func": self.template_func,
+                    "template_address": self.template_address}
             open("IDAFrida.json", "w").write(json.dumps(data))
         except Exception as e:
             print(e)
@@ -198,7 +309,8 @@ class Configuration:
         try:
             data = json.loads(open("IDAFrida.json", "r").read())
             self.frida_cmd = data["frida_cmd"]
-            self.template = data["template"]
+            self.template_func = data["template_func"]
+            self.template_address = data["template_address"]
         except Exception as e:
             print(e)
 
@@ -206,20 +318,56 @@ class Configuration:
 global_config = Configuration()
 
 
-class ConfigurationUI(QDialog):
+class FuncConfigurationUI(QDialog):
     def __init__(self, conf: Configuration) -> None:
-        super(ConfigurationUI, self).__init__()
+        super(FuncConfigurationUI, self).__init__()
         self.conf = conf
+        self.setFixedWidth(700)
+        self.setFixedHeight(700)
         self.edit_template = QTextEdit()
-        self.edit_template.setPlainText(self.conf.template)
-        layout = QHBoxLayout()
+        self.edit_template.setPlainText(self.conf.template_func)
+        layout = QVBoxLayout()
         layout.addWidget(self.edit_template)
+        btn_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btn_box.setCenterButtons(True)
+        btn_box.accepted.connect(self.accepted)
+        btn_box.rejected.connect(self.rejected)
+        layout.addWidget(btn_box)
         self.setLayout(layout)
 
-    def closeEvent(self, a0) -> None:
-        self.conf.set_template(self.edit_template.toPlainText())
+    def rejected(self):
+        self.close()
+
+    def accepted(self):
+        self.conf.set_template_address(self.edit_template.toPlainText())
         self.conf.store()
-        return super().closeEvent(a0)
+        self.close()
+
+
+class AddressConfigurationUI(QDialog):
+    def __init__(self, conf: Configuration) -> None:
+        super(AddressConfigurationUI, self).__init__()
+        self.setFixedWidth(700)
+        self.setFixedHeight(700)
+        self.conf = conf
+        self.edit_template = QTextEdit()
+        self.edit_template.setPlainText(self.conf.template_address)
+        layout = QVBoxLayout()
+        layout.addWidget(self.edit_template)
+        btn_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btn_box.setCenterButtons(True)
+        btn_box.accepted.connect(self.accepted)
+        btn_box.rejected.connect(self.rejected)
+        layout.addWidget(btn_box)
+        self.setLayout(layout)
+
+    def rejected(self):
+        self.close()
+
+    def accepted(self):
+        self.conf.set_template_address(self.edit_template.toPlainText())
+        self.conf.store()
+        self.close()
 
 
 class ScriptGenerator:
@@ -259,8 +407,14 @@ class ScriptGenerator:
 
         return function_name
 
-    def generate_stub(self, repdata: dict):
-        s = self.conf.template
+    def generate_func_stub(self, repdata: dict):
+        s = self.conf.template_func
+        for key, v in repdata.items():
+            s = s.replace("[%s]" % key, v)
+        return s
+
+    def generate_address_stub(self, repdata: dict):
+        s = self.conf.template_address
         for key, v in repdata.items():
             s = s.replace("[%s]" % key, v)
         return s
@@ -275,11 +429,35 @@ class ScriptGenerator:
                 "offset": hex(func_addr - self.imagebase),
                 "nargs": hex(dec_func.type.get_nargs())
             }
-            stubs.append(self.generate_stub(repdata))
+            stubs.append(self.generate_func_stub(repdata))
         return "\n".join(stubs)
+
+    def generate_for_address(self, address, registers) -> str:
+        repdata = {
+            "filename": self.get_idb_filename(),
+            "address": hex(address - self.imagebase),
+            "registers": registers
+        }
+        return self.generate_address_stub(repdata)
 
     def generate_for_funcs_to_file(self, func_addr_list, filename) -> bool:
         data = self.generate_for_funcs(func_addr_list)
+        try:
+            open(filename, "w").write(data)
+            print("The generated Frida script has been exported to the file: ", filename)
+        except Exception as e:
+            print(e)
+            return False
+        try:
+            QApplication.clipboard().setText(data)
+            print("The generated Frida script has been copied to the clipboard!")
+        except Exception as e:
+            print(e)
+            return False
+        return True
+
+    def generate_for_address_to_file(self, address, registers, filename) -> bool:
+        data = self.generate_for_address(address, registers)
         try:
             open(filename, "w").write(data)
             print("The generated Frida script has been exported to the file: ", filename)
@@ -310,14 +488,44 @@ class IDAFridaMenuAction(Action):
         raise NotImplemented
 
     def update(self, ctx) -> None:
-        if ctx.form_type == idaapi.BWN_FUNCS or ctx.form_type==idaapi.BWN_PSEUDOCODE or ctx.form_type==idaapi.BWN_DISASM:
+        if ctx.form_type == idaapi.BWN_FUNCS or ctx.form_type == idaapi.BWN_PSEUDOCODE or ctx.form_type == idaapi.BWN_DISASM:
             idaapi.attach_action_to_popup(ctx.widget, None, self.name, self.TopDescription + "/")
             return idaapi.AST_ENABLE_FOR_WIDGET
         return idaapi.AST_DISABLE_FOR_WIDGET
 
 
+class InputRegistersUI(QDialog):
+    def __init__(self) -> None:
+        super(InputRegistersUI, self).__init__()
+        self.setWindowTitle("Please enter the registers separated by spaces")
+        self.setFixedWidth(600)
+        self.edit_template = QLineEdit()
+        self.edit_template.setClearButtonEnabled(True)
+        self.edit_template.setPlaceholderText("eg: x0 x1 x2 x3....")
+        layout = QVBoxLayout()
+        btn_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btn_box.setCenterButtons(True)
+        btn_box.accepted.connect(self.accepted)
+        btn_box.rejected.connect(self.rejected)
+        layout.addWidget(self.edit_template)
+        layout.addWidget(btn_box)
+        self.setLayout(layout)
+
+    def rejected(self):
+        self.close()
+
+    def accepted(self):
+        gen = ScriptGenerator(global_config)
+        idb_path = os.path.dirname(idaapi.get_input_file_path())
+        out_file = os.path.join(idb_path, "IDAhook.js")
+        text=self.edit_template.text()
+        text=text.strip()
+        gen.generate_for_address_to_file(idaapi.get_screen_ea(),text, out_file)
+        self.close()
+
+
 class GenerateFridaHookScript(IDAFridaMenuAction):
-    description = "Generate Frida Script"
+    description = "Generate Frida Script on current func"
 
     def __init__(self):
         super(GenerateFridaHookScript, self).__init__()
@@ -326,11 +534,31 @@ class GenerateFridaHookScript(IDAFridaMenuAction):
         gen = ScriptGenerator(global_config)
         idb_path = os.path.dirname(idaapi.get_input_file_path())
         out_file = os.path.join(idb_path, "IDAhook.js")
-        if ctx.form_type==idaapi.BWN_FUNCS:
-            selected = [idaapi.getn_func(idx).start_ea for idx in ctx.chooser_selection] #from "idaapi.getn_func(idx - 1)" to "idaapi.getn_func(idx)"
+        if ctx.form_type == idaapi.BWN_FUNCS:
+            selected = [idaapi.getn_func(idx).start_ea for idx in
+                        ctx.chooser_selection]  # from "idaapi.getn_func(idx - 1)" to "idaapi.getn_func(idx)"
         else:
-            selected=[idaapi.get_func(idaapi.get_screen_ea()).start_ea]
+            selected = [idaapi.get_func(idaapi.get_screen_ea()).start_ea]
         gen.generate_for_funcs_to_file(selected, out_file)
+
+
+class GenerateFridaHookScriptOnCurrentAddress(IDAFridaMenuAction):
+    description = "Generate Frida Script on current address"
+
+    def __init__(self):
+        super(GenerateFridaHookScriptOnCurrentAddress, self).__init__()
+
+    def activate(self, ctx):
+        ui = InputRegistersUI()
+        ui.show()
+        ui.exec_()
+
+    def update(self, ctx) -> None:
+        if ctx.form_type == idaapi.BWN_DISASM:
+            idaapi.attach_action_to_popup(ctx.widget, None, self.name, self.TopDescription + "/")
+            return idaapi.AST_ENABLE_FOR_WIDGET
+        return idaapi.AST_DISABLE_FOR_WIDGET
+
 
 class RunGeneratedScript(IDAFridaMenuAction):
     description = "Run Generated Script"
@@ -342,14 +570,26 @@ class RunGeneratedScript(IDAFridaMenuAction):
         print("template")
 
 
-class ViewFridaTemplate(IDAFridaMenuAction):
-    description = "View Frida Template"
+class ViewFridaTemplateFunc(IDAFridaMenuAction):
+    description = "View Frida func hook Template"
 
     def __init__(self):
-        super(ViewFridaTemplate, self).__init__()
+        super(ViewFridaTemplateFunc, self).__init__()
 
     def activate(self, ctx):
-        ui = ConfigurationUI(global_config)
+        ui = FuncConfigurationUI(global_config)
+        ui.show()
+        ui.exec_()
+
+
+class ViewFridaTemplateAddress(IDAFridaMenuAction):
+    description = "View Frida address hook Template"
+
+    def __init__(self):
+        super(ViewFridaTemplateAddress, self).__init__()
+
+    def activate(self, ctx):
+        ui = AddressConfigurationUI(global_config)
         ui.show()
         ui.exec_()
 
@@ -365,6 +605,8 @@ class SetFridaRunCommand(IDAFridaMenuAction):
 
 
 action_manager.register(GenerateFridaHookScript())
+action_manager.register(GenerateFridaHookScriptOnCurrentAddress())
 # action_manager.register(RunGeneratedScript())
-action_manager.register(ViewFridaTemplate())
+action_manager.register(ViewFridaTemplateFunc())
+action_manager.register(ViewFridaTemplateAddress())
 # action_manager.register(SetFridaRunCommand())
