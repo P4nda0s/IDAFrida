@@ -122,7 +122,7 @@ default_func_hook_template = """
     function print_arg(addr) {
         try {
             var module = Process.findRangeByAddress(addr);
-            if (module != null) return "\\n"+addr+"(pointer)   memory dump:\\n"+hexdump(addr) + "\\n";
+            if (module != null) return ""+addr+"(pointer)   memory dump:\\n"+hexdump(addr) + "\\n";
             return ptr(addr) + "\\n";
         } catch (e) {
             return addr + "\\n";
@@ -228,7 +228,7 @@ default_address_hook_template = """
     function print_arg(addr) {
         try {
             var module = Process.findRangeByAddress(addr);
-            if (module != null) return "\\n"+addr+"(pointer)   memory dump:\\n"+hexdump(addr) + "\\n";
+            if (module != null) return ""+addr+"(pointer)   memory dump:\\n"+hexdump(addr) + "\\n";
             return ptr(addr) + "\\n";
         } catch (e) {
             return addr + "\\n";
