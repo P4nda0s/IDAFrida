@@ -122,7 +122,7 @@ default_func_hook_template = """
     function print_arg(addr) {
         try {
             var module = Process.findRangeByAddress(addr);
-            if (module != null) return "\\n"+hexdump(addr) + "\\n";
+            if (module != null) return "\\n"+addr+"(pointer)   memory dump:\\n"+hexdump(addr) + "\\n";
             return ptr(addr) + "\\n";
         } catch (e) {
             return addr + "\\n";
@@ -138,7 +138,7 @@ default_func_hook_template = """
                     this.logs = "";
                     this.params = [];
                     // @ts-ignore
-                    this.logs=this.logs.concat("So: " + module.name + "  Method: [funcname] offset: " + ptr(funcPtr).sub(module.base) + "\\n");
+                    this.logs=this.logs.concat("So: " + module.name +"["+module.base+"]" + "  Method: [funcname] offset: " + ptr(funcPtr).sub(module.base) + "\\n");
                     for (let i = 0; i < paramsNum; i++) {
                         this.params.push(args[i]);
                         this.logs=this.logs.concat("this.args" + i + " onEnter: " + print_arg(args[i]));
@@ -171,7 +171,7 @@ default_func_hook_template = """
 
 default_address_hook_template = """
 
-//[filename]->[address]
+//[filename]->[address]: [registers]
 (function () {
 
     // @ts-ignore
@@ -228,7 +228,7 @@ default_address_hook_template = """
     function print_arg(addr) {
         try {
             var module = Process.findRangeByAddress(addr);
-            if (module != null) return "\\n"+hexdump(addr) + "\\n";
+            if (module != null) return "\\n"+addr+"(pointer)   memory dump:\\n"+hexdump(addr) + "\\n";
             return ptr(addr) + "\\n";
         } catch (e) {
             return addr + "\\n";
@@ -243,7 +243,7 @@ default_address_hook_template = """
                 onEnter: function (args) {
                     this.logs = "";
                     // @ts-ignore
-                    this.logs=this.logs.concat("So: " + module.name + "  Address: " + ptr(address).sub(module.base) + "\\n");
+                    this.logs=this.logs.concat("So: " + module.name +"["+module.base+"]" + "  Address: " + ptr(address).sub(module.base) + " [registers] " + "\\n");
 
                     if(registers!=null&&registers.trim()!==""){
                         for (let register of registers.trim().split(" ")) {
