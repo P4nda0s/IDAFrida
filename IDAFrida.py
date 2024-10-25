@@ -132,6 +132,9 @@ default_func_hook_template = """
     // @ts-ignore
     function hook_native_addr(funcPtr, paramsNum) {
         var module = Process.findModuleByAddress(funcPtr);
+        if(module==null){
+            module=Process.findModuleByName("[filename]")
+        }
         try {
             Interceptor.attach(funcPtr, {
                 onEnter: function (args) {
