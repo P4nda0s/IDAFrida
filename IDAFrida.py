@@ -121,9 +121,7 @@ default_func_hook_template = """
     // @ts-ignore
     function print_arg(addr) {
         try {
-            var module = Process.findRangeByAddress(addr);
-            if (module != null) return ""+addr+"(pointer)   memory dump:\\n"+hexdump(addr) + "\\n";
-            return ptr(addr) + "\\n";
+            return ""+addr+"(pointer)   memory dump:\\n"+hexdump(addr) + "\\n";
         } catch (e) {
             return addr + "\\n";
         }
