@@ -489,7 +489,7 @@ class IDAFridaMenuAction(Action):
         raise NotImplemented
 
     def update(self, ctx) -> None:
-        if ctx.form_type == idaapi.BWN_FUNCS or ctx.form_type == idaapi.BWN_PSEUDOCODE or ctx.form_type == idaapi.BWN_DISASM:
+        if ctx.widget_type == idaapi.BWN_FUNCS or ctx.widget_type == idaapi.BWN_PSEUDOCODE or ctx.widget_type == idaapi.BWN_DISASM:
             idaapi.attach_action_to_popup(ctx.widget, None, self.name, self.TopDescription + "/")
             return idaapi.AST_ENABLE_FOR_WIDGET
         return idaapi.AST_DISABLE_FOR_WIDGET
@@ -535,7 +535,7 @@ class GenerateFridaHookScript(IDAFridaMenuAction):
         gen = ScriptGenerator(global_config)
         idb_path = os.path.dirname(idaapi.get_input_file_path())
         out_file = os.path.join(idb_path, "IDAhook.js")
-        if ctx.form_type == idaapi.BWN_FUNCS:
+        if ctx.widget_type == idaapi.BWN_FUNCS:
             selected = [idaapi.getn_func(idx).start_ea for idx in
                         ctx.chooser_selection]  # from "idaapi.getn_func(idx - 1)" to "idaapi.getn_func(idx)"
         else:
@@ -555,7 +555,7 @@ class GenerateFridaHookScriptOnCurrentAddress(IDAFridaMenuAction):
         ui.exec_()
 
     def update(self, ctx) -> None:
-        if ctx.form_type == idaapi.BWN_DISASM:
+        if ctx.widget_type == idaapi.BWN_DISASM:
             idaapi.attach_action_to_popup(ctx.widget, None, self.name, self.TopDescription + "/")
             return idaapi.AST_ENABLE_FOR_WIDGET
         return idaapi.AST_DISABLE_FOR_WIDGET
