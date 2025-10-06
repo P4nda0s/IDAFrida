@@ -166,7 +166,7 @@ default_func_hook_template = """
             console.log(e);
         }
     }
-    let module=Process.getModuleByName("[filename]");
+    let module=Process.findModuleByName("[filename]");
     if(module==null){
         waitForLoadLibraryNative("[filename]",function(){
             // @ts-ignore
@@ -270,7 +270,7 @@ default_address_hook_template = """
             console.log(e);
         }
     }
-    let module=Process.getModuleByName("[filename]");
+    let module=Process.findModuleByName("[filename]");
     if(module==null){
         waitForLoadLibraryNative("[filename]",function(){
             // @ts-ignore
