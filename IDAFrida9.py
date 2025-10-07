@@ -81,7 +81,7 @@ default_func_hook_template = """
     // @ts-ignore
     function waitForLoadLibraryNative(libName,callback){
         // @ts-ignore
-        Interceptor.attach(Module.findExportByName(null, "dlopen"), {
+        Interceptor.attach(Module.findGlobalExportByName("dlopen"), {
             onEnter: function(args) {
                 var pathptr = args[0];
                 if (pathptr !== undefined && pathptr != null) {
@@ -104,7 +104,7 @@ default_func_hook_template = """
         })
     
         // @ts-ignore
-        Interceptor.attach(Module.findExportByName(null, "android_dlopen_ext"), {
+        Interceptor.attach(Module.findGlobalExportByName("android_dlopen_ext"), {
             onEnter: function(args) {
                 var pathptr = args[0];
                 if (pathptr !== undefined && pathptr != null) {
@@ -166,15 +166,15 @@ default_func_hook_template = """
             console.log(e);
         }
     }
-    let module=Module.findBaseAddress("[filename]");
+    let module=Process.findModuleByName("[filename]");
     if(module==null){
         waitForLoadLibraryNative("[filename]",function(){
             // @ts-ignore
-            hook_native_addr(Module.findBaseAddress("[filename]").add([offset]), [nargs]);
+            hook_native_addr(Process.getModuleByName("[filename]").base.add([offset]), [nargs]);
         });
     }else{
         // @ts-ignore
-        hook_native_addr(Module.findBaseAddress("[filename]").add([offset]), [nargs]);    
+        hook_native_addr(Process.getModuleByName("[filename]").base.add([offset]), [nargs]);
     }
 })();
 
@@ -188,7 +188,7 @@ default_address_hook_template = """
     // @ts-ignore
     function waitForLoadLibraryNative(libName,callback){
         // @ts-ignore
-        Interceptor.attach(Module.findExportByName(null, "dlopen"), {
+        Interceptor.attach(Module.findGlobalExportByName("dlopen"), {
             onEnter: function(args) {
                 var pathptr = args[0];
                 if (pathptr !== undefined && pathptr != null) {
@@ -211,7 +211,7 @@ default_address_hook_template = """
         })
 
         // @ts-ignore
-        Interceptor.attach(Module.findExportByName(null, "android_dlopen_ext"), {
+        Interceptor.attach(Module.findGlobalExportByName("android_dlopen_ext"), {
             onEnter: function(args) {
                 var pathptr = args[0];
                 if (pathptr !== undefined && pathptr != null) {
@@ -270,15 +270,15 @@ default_address_hook_template = """
             console.log(e);
         }
     }
-    let module=Module.findBaseAddress("[filename]");
+    let module=Process.findModuleByName("[filename]");
     if(module==null){
         waitForLoadLibraryNative("[filename]",function(){
             // @ts-ignore
-            hook_native_addr(Module.findBaseAddress("[filename]").add([address]), "[registers]");
+            hook_native_addr(Process.getModuleByName("[filename]").base.add([address]), "[registers]");
         });
     }else{
         // @ts-ignore
-        hook_native_addr(Module.findBaseAddress("[filename]").add([address]), "[registers]");
+        hook_native_addr(Process.getModuleByName("[filename]").base.add([address]), "[registers]");
     }
 })();
 
@@ -625,3 +625,4 @@ action_manager.register(GenerateFridaHookScriptOnCurrentAddress())
 action_manager.register(ViewFridaTemplateFunc())
 action_manager.register(ViewFridaTemplateAddress())
 # action_manager.register(SetFridaRunCommand())
+
